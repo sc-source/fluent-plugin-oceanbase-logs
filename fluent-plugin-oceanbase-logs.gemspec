@@ -11,7 +11,7 @@ Gem::Specification.new do |spec|
   spec.description   = "Fetches Slow SQL and Top SQL per-execution samples from OceanBase Cloud " \
                         "and emits them as Fluentd events (one record per trace, dedup by traceId)."
   spec.homepage      = "https://github.com/sc-source/fluent-plugin-oceanbase-logs"
-  spec.license       = "MIT"
+  spec.license       = "Apache-2.0"
 
   spec.files         = Dir['lib/**/*', 'README.md', 'LICENSE']
   spec.require_paths = ["lib"]
