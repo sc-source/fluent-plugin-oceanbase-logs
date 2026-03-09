@@ -1,0 +1,23 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN sed -i 's|http://archive.ubuntu.com|http://mirrors.aliyun.com|g' /etc/apt/sources.list \
+    && sed -i 's|http://security.ubuntu.com|http://mirrors.aliyun.com|g' /etc/apt/sources.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+       ruby ruby-dev build-essential ca-certificates \
+    && gem install bundler --no-document \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY Gemfile fluent-plugin-oceanbase-logs.gemspec ./
+COPY lib/ lib/
+
+RUN bundle install --jobs 4
+
+COPY test/ test/
+COPY Rakefile ./
+
+CMD ["bundle", "exec", "rake", "test"]

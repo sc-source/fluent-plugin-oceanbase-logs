@@ -1,0 +1,23 @@
+services:
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    command: bundle exec rake test
+
+  fluentd:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    volumes:
+      - ./example:/fluentd/etc/example:ro
+      - ./output:/fluentd/output
+      - fluentd-state:/fluentd/state
+      - fluentd-buffer:/fluentd/buffer
+    command: fluentd -c /fluentd/etc/example/fluentd.conf
+
+volumes:
+  fluentd-state:
+  fluentd-buffer:
