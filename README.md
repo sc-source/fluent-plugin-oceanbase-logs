@@ -11,7 +11,7 @@ Fluentd input plugin that periodically fetches SQL diagnostics data from [OceanB
 
 | fluent-plugin-oceanbase-logs | fluentd   | ruby   |
 | ---------------------------- | --------- | ------ |
-| >= 0.1.0                     | >= 1.8.0  | >= 2.4 |
+| >= 0.1.2                    | >= 1.8.0  | >= 2.4 |
 
 ## Installation
 
@@ -26,7 +26,7 @@ gem install fluent-plugin-oceanbase-logs
 
 ## Configuration
 
-### Slow SQL → file (one record per execution)
+### Slow SQL → file
 
 ```xml
 <source>
@@ -39,9 +39,9 @@ gem install fluent-plugin-oceanbase-logs
   instance_id       "#{ENV['OCEANBASE_INSTANCE_ID']}"
   tenant_id         "#{ENV['OCEANBASE_TENANT_ID']}"
 
-  # 服务接入点（API 地址）
+  # API endpoint
   endpoint          api-cloud-cn.oceanbase.com
-  # 采集间隔（秒）与采集时间范围（秒）
+  # Fetch interval (seconds) and lookback window (seconds)
   fetch_interval    60
   lookback_seconds  600
 
@@ -66,6 +66,69 @@ gem install fluent-plugin-oceanbase-logs
     path /var/log/fluentd/buffer/slow_sql
     flush_mode interval
     flush_interval 5s
+  </buffer>
+</match>
+```
+
+### Slow SQL → Loki
+
+Requires [fluent-plugin-grafana-loki](https://github.com/grafana/fluent-plugin-grafana-loki). Example: Slow SQL to Grafana Loki.
+
+```xml
+<source>
+  @type oceanbase_logs
+  tag  oceanbase.slow_sql
+  log_type slow_sql
+
+  access_key_id     "#{ENV['OCEANBASE_ACCESS_KEY_ID']}"
+  access_key_secret "#{ENV['OCEANBASE_ACCESS_KEY_SECRET']}"
+  instance_id       "#{ENV['OCEANBASE_INSTANCE_ID']}"
+  tenant_id         "#{ENV['OCEANBASE_TENANT_ID']}"
+
+  endpoint          api-cloud-cn.oceanbase.com
+  fetch_interval    60
+  lookback_seconds  600
+
+  deduplicate       true
+  include_metadata  true
+
+  <storage>
+    @type local
+    persistent true
+    path /var/log/fluentd/oceanbase_slow_sql.state
+  </storage>
+</source>
+
+<filter oceanbase.slow_sql>
+  @type record_transformer
+  enable_ruby true
+  <record>
+    message ${record["sqlTextShort"]}
+  </record>
+</filter>
+
+<match oceanbase.slow_sql>
+  @type loki
+  url http://localhost:3100
+
+  extra_labels {"job":"oceanbase-slow-sql"}
+
+  <label>
+    ob_instance_id
+    ob_tenant_id
+    dbName
+    sqlType
+    userName
+  </label>
+
+  remove_keys ob_log_type
+
+  <buffer>
+    @type memory
+    flush_interval 10s
+    chunk_limit_size 1m
+    retry_max_interval 30s
+    retry_forever true
   </buffer>
 </match>
 ```
@@ -104,15 +167,15 @@ gem install fluent-plugin-oceanbase-logs
 | `filter_condition` | string | no | nil | Advanced filter (e.g. `@avgCpuTime > 20`) |
 | `sql_text_length` | integer | no | 65535 | Max SQL text length returned |
 
-#### 服务接入点与采集时间（均在配置文件中配置）
+#### Endpoint and fetch timing (configured in config file)
 
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `endpoint` | string | no | `api-cloud-cn.oceanbase.com` | 服务接入点（API 地址；国际站可用 `api-cloud.oceanbase.com`） |
-| `fetch_interval` | time | no | 300 (5 min) | 采集间隔（秒）：每隔多久请求一次 API |
-| `lookback_seconds` | integer | no | 600 (10 min) | 采集时间范围（秒）：每次请求查询最近多长时间的数据 |
+| `endpoint` | string | no | `api-cloud-cn.oceanbase.com` | API endpoint (use `api-cloud.oceanbase.com` for international) |
+| `fetch_interval` | time | no | 300 (5 min) | Fetch interval (seconds): how often to call the API |
+| `lookback_seconds` | integer | no | 600 (10 min) | Lookback window (seconds): time range of data to query per request |
 
-可通过环境变量覆盖：`OCEANBASE_ENDPOINT`、`OCEANBASE_FETCH_INTERVAL`、`OCEANBASE_LOOKBACK_SECONDS`（参见 `example/` 与 `.env.example`）。
+Can be overridden by environment variables: `OCEANBASE_ENDPOINT`, `OCEANBASE_FETCH_INTERVAL`, `OCEANBASE_LOOKBACK_SECONDS` (see `example/` and `.env.example`).
 
 #### Behaviour
 
@@ -123,7 +186,7 @@ gem install fluent-plugin-oceanbase-logs
 | `ssl_verify_peer` | bool | no | true | Verify SSL certificates |
 | `http_proxy` | string | no | nil | HTTP proxy URL |
 
-（`endpoint` 见上表「服务接入点与采集时间」。）
+(`endpoint` is in the "Endpoint and fetch timing" table above.)
 
 ## Output record fields
 
@@ -156,10 +219,9 @@ See the `example/` directory:
 ## Test
 
 ```bash
-bundle install
-bundle exec rake test
+fluentd -c /fluentd/etc/fluentd.conf
 ```
 
 ## License
 
-MIT
+Apache License Version 2.0, January 2004 — [http://www.apache.org/licenses/](http://www.apache.org/licenses/LICENSE-2.0)
