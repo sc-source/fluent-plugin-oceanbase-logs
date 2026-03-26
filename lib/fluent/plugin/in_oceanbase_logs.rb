@@ -74,6 +74,21 @@ module Fluent::Plugin
       super
       @endpoint = @endpoint.to_s.strip
       @endpoint = 'api-cloud-cn.oceanbase.com' if @endpoint.empty?
+
+      %i[@access_key_id @access_key_secret @instance_id @tenant_id].each do |iv|
+        v = instance_variable_get(iv)
+        next unless v.is_a?(String)
+        instance_variable_set(iv, v.strip)
+      end
+      raise Fluent::ConfigError, 'access_key_id is required and cannot be empty' if @access_key_id.empty?
+      raise Fluent::ConfigError, 'access_key_secret is required and cannot be empty' if @access_key_secret.empty?
+      raise Fluent::ConfigError, 'instance_id is required and cannot be empty (e.g. set OCEANBASE_INSTANCE_ID)' if @instance_id.empty?
+      raise Fluent::ConfigError, 'tenant_id is required and cannot be empty (e.g. set OCEANBASE_TENANT_ID)' if @tenant_id.empty?
+
+      %i[@db_name @search_keyword @node_ip @filter_condition @project_id].each do |iv|
+        v = instance_variable_get(iv)
+        instance_variable_set(iv, nil) if v.is_a?(String) && v.strip.empty?
+      end
       @api_path_segment = LOG_TYPE_PATHS[@log_type.to_s]
       if @deduplicate
         @seen_storage = storage_create(
@@ -153,6 +168,7 @@ module Fluent::Plugin
             @seen_storage.put(dedup_key, Time.now.to_i.to_s)
           end
 
+          sample['ob_log_type'] = @log_type.to_s
           sample = attach_metadata(sample, start_time, end_time) if @include_metadata
 
           event_time = if sample['requestTime']
@@ -194,7 +210,6 @@ module Fluent::Plugin
       record.merge(
         'ob_instance_id'   => @instance_id,
         'ob_tenant_id'     => @tenant_id,
-        'ob_log_type'      => @log_type.to_s,
         'query_start_time' => start_time,
         'query_end_time'   => end_time
       )
@@ -247,7 +262,16 @@ module Fluent::Plugin
       end
 
       unless resp && resp.code.to_i == 200
-        log.error "OceanBase API HTTP #{resp&.code}", body: resp&.body, path: path
+        code = resp&.code
+        raw  = resp&.body.to_s
+        detail = nil
+        begin
+          j = JSON.parse(raw)
+          detail = j['message'] || j['errorMessage'] || j['msg']
+        rescue JSON::ParserError
+        end
+        log.error "OceanBase API HTTP #{code}",
+                  message: detail, body: (raw.bytesize > 512 ? raw.byteslice(0, 512) + '...' : raw), path: path
         return nil
       end
 

@@ -163,6 +163,17 @@ class OceanBaseLogsInputTest < Test::Unit::TestCase
         ))
       end
     end
+
+    test 'empty instance_id raises error' do
+      conf = BASE_CONFIG.sub(/^\s*instance_id\s+.*\n/, "    instance_id \"\"\n")
+      assert_raise(Fluent::ConfigError) { create_driver(conf) }
+    end
+
+    test 'empty tenant_id raises error' do
+      conf = BASE_CONFIG.sub(/^\s*tenant_id\s+.*\n/, "    tenant_id \"\"\n")
+      assert_raise(Fluent::ConfigError) { create_driver(conf) }
+    end
+
   end
 
   # ----------------------------------------------------------- fetching
@@ -294,6 +305,7 @@ class OceanBaseLogsInputTest < Test::Unit::TestCase
       record = d.events.first[2]
       assert_nil record['ob_instance_id']
       assert_nil record['ob_tenant_id']
+      assert_equal 'slow_sql', record['ob_log_type']
     end
   end
 end
